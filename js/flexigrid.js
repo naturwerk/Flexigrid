@@ -5,6 +5,19 @@
  * Dual licensed under the MIT or GPL Version 2 licenses.
  * http://jquery.org/license
  *
+ * Changelog:
+ * 2010-12-28
+ * Hacked by Manuel Joao Silva 
+ * http://manueljoaosilva.com
+ * mail@manueljoaosilva.com
+ * - Save state of: sort, search, column size and page (depends on jQuery Cookie: http://plugins.jquery.com/project/Cookie)
+ * - Added recalcLayout function to allow the layout recalc via API (By Sven - http://groups.google.com/group/flexigrid/msg/3f0d5a4d74093532)
+ * 2012-07-23
+ * Hacked by Reto Schneider
+ * - Merge Manuel Joao Silva's changes into the current version of Flexigrid
+ * - Note: Columnsize functionality was intentionally left out as recent versions of
+ *         Flexigrid support it out of the box.
+ * - Add p.{search,reset,minmax,hideshow} to allow those strings to be translated
  */
 (function ($) {
 	$.addFlex = function (t, p) {
@@ -52,7 +65,15 @@
 			onChangeSort: false,
 			onSuccess: false,
 			onError: false,
-			onSubmit: false //using a custom populate function
+			onSubmit: false, //using a custom populate function
+			cookies : true,
+			tableId : 'flexigrid',
+			colMove : true,
+			minimize : false,
+			search : 'Search',
+			reset : 'Reset',
+			minmax : 'Minimize/Maximize Table',
+			hideshow: 'Hide/Show Columns',
 		}, p);
 		$(t).show() //show if hidden
 			.attr({
@@ -63,6 +84,20 @@
 			.removeAttr('width'); //remove width properties
 		//create grid class
 		var g = {
+			prefs : {
+			cookie_name : p.tableId,
+			data : {},
+			load : function() {
+					var the_cookie = $.cookie(this.cookie_name);
+					if (the_cookie) {
+						this.data = JSON.parse(the_cookie);
+					}
+					return this.data;
+				},
+			save : function() {
+					$.cookie(this.cookie_name, JSON.stringify(this.data));
+				}
+			},
 			hset: {},
 			rePosDrag: function () {
 				var cdleft = 0 - this.hDiv.scrollLeft;
@@ -96,7 +131,7 @@
 					}
 				);
 				var nd = parseInt($(g.nDiv).height());
-				if (nd > newH) $(g.nDiv).height(newH).width(200);
+				if (nd > newH) $(g.nDiv).height('auto').width(200);
 				else $(g.nDiv).height('auto').width('auto');
 				$(g.block).css({
 					height: newH,
@@ -106,6 +141,20 @@
 				if (p.height != 'auto' && p.resizable) hrH = g.vDiv.offsetTop;
 				$(g.rDiv).css({
 					height: hrH
+				});
+			},
+			// http://groups.google.com/group/flexigrid/msg/3f0d5a4d74093532
+			recalcLayout : function() {
+				g.toggleCol(0, !$('nDiv', this).find('input:eq[0]').val());
+				var cdheight = $(g.bDiv).height();
+				var hdheight = $(g.hDiv).height();
+				$(g.cDrag).css({
+					top : -hdheight + 'px'
+				});
+				$('div', g.cDrag).each(function() {
+					$(this).css({
+						height : cdheight + hdheight
+					})
 				});
 			},
 			dragStart: function (dragtype, e, obj) { //default drag function start
@@ -484,6 +533,16 @@
 				$('.sasc', this.hDiv).removeClass('sasc');
 				$('div', th).addClass('s' + p.sortorder);
 				p.sortname = $(th).attr('abbr');
+				// by mjs save sort in cookie
+				if (p.cookies) {
+						var prefs = g.prefs.load();
+						prefs.sortname = {};
+						prefs.sortorder = {};
+						prefs.sortname = p.sortname;
+						prefs.sortorder = p.sortorder;
+						g.prefs.data = prefs;
+						g.prefs.save();
+					}
 				if (p.onChangeSort) {
 					p.onChangeSort(p.sortname, p.sortorder);
 				} else {
@@ -528,6 +587,19 @@
 				}
 				if ($.browser.opera) {
 					$(t).css('visibility', 'hidden');
+				}
+				// by mjs check if cookie exists
+				// if exists set page and sort equal to cookie value
+				if (p.cookies) {
+					var prefs = g.prefs.load();
+					if (typeof prefs.page != 'undefined')
+						p.newp = prefs.page;
+					if (typeof prefs.sortname != 'undefined'
+							&& typeof prefs.sortorder != 'undefined') {
+						p.newp = prefs.page;
+						p.sortname = prefs.sortname;
+						p.sortorder = prefs.sortorder;
+					}
 				}
 				if (!p.newp) {
 					p.newp = 1;
@@ -575,8 +647,28 @@
 				});
 			},
 			doSearch: function () {
-				p.query = $('input[name=q]', g.sDiv).val();
-				p.qtype = $('select[name=qtype]', g.sDiv).val();
+				var squery = $('input[name=q]', g.sDiv).val();
+				var sqtype = $('select[name=qtype]', g.sDiv).val();
+				if (p.cookies) {
+					var prefs = g.prefs.load();
+					if (sqtype !== "") {
+						prefs.qtype = {};
+						prefs.qtype = sqtype;
+					} else {
+						delete prefs.qtype;
+					}
+					if (squery !== "") {
+						prefs.q = {};
+						prefs.q = squery;
+					} else {
+						delete prefs.q;
+					}
+					prefs.page = 1;
+					g.prefs.data = prefs;
+					g.prefs.save();
+				}
+				p.query = squery;
+				p.qtype = sqtype;
 				p.newp = 1;
 				this.populate();
 			},
@@ -621,6 +713,13 @@
 				if (p.onChangePage) {
 					p.onChangePage(p.newp);
 				} else {
+					if (p.cookies) {
+						var prefs = g.prefs.load();
+						prefs.page = {};
+						prefs.page = p.newp;
+						g.prefs.data = prefs;
+						g.prefs.save();
+					}
 					this.populate();
 				}
 			},
@@ -700,7 +799,7 @@
 						if (e.ctrlKey)
 						{
 							$(this).toggleClass('trSelected'); 
-							g.multisel = true; 
+							g.multisel = true;
 							this.focus();
 						}
 					}).mouseup(function () {
@@ -979,6 +1078,15 @@
 					if (obj.href || obj.type) return true;
 					g.changeSort(this);
 				});
+				// init sort overwrite if cookie is set
+				if (p.cookies) {
+					var prefs = g.prefs.load();
+					if (typeof prefs.sortname != 'undefined'
+							&& typeof prefs.sortorder != 'undefined') {
+						p.sortname = prefs.sortname;
+						p.sortorder = prefs.sortorder;
+					}
+				}
 				if ($(this).attr('abbr') == p.sortname) {
 					this.className = 'sorted';
 					thdiv.className = 's' + p.sortorder;
@@ -1191,6 +1299,9 @@
 				});
 			}
 			//add search button
+			// edited by manueljoaosilva[at]gmail[dot]com
+			// check if cookie exists qtype (search type and q (query))
+			// if exists execute the query
 			if (p.searchitems) {
 				$('.pDiv2', g.pDiv).prepend("<div class='pGroup'> <div class='pSearch pButton'><span></span></div> </div>  <div class='btnseparator'></div>");
 				$('.pSearch', g.pDiv).click(function () {
@@ -1203,12 +1314,23 @@
 				var sitems = p.searchitems;
 				var sopt = '', sel = '';
 				for (var s = 0; s < sitems.length; s++) {
-					if (p.qtype == '' && sitems[s].isdefault == true) {
-						p.qtype = sitems[s].name;
-						sel = 'selected="selected"';
-					} else {
-						sel = '';
-					}
+					if (p.cookies)
+							var prefs = g.prefs.load();
+						if (p.cookies && typeof prefs.qtype != 'undefined') {
+							if (sitems[s].name === prefs.qtype) {
+								p.qtype = sitems[s].name;
+								sel = 'selected="selected"';
+							} else {
+								sel = '';
+							}
+						} else {							
+							if (p.qtype == '' && sitems[s].isdefault == true) {
+								p.qtype = sitems[s].name;
+								sel = 'selected="selected"';
+							} else {
+								sel = '';
+							}
+						}
 					sopt += "<option value='" + sitems[s].name + "' " + sel + " >" + sitems[s].display + "&nbsp;&nbsp;</option>";
 				}
 				if (p.qtype == '') {
@@ -1216,7 +1338,28 @@
 				}
 				$(g.sDiv).append("<div class='sDiv2'>" + p.findtext + 
 						" <input type='text' value='" + p.query +"' size='30' name='q' class='qsbox' /> "+
-						" <select name='qtype'>" + sopt + "</select></div>");
+						" <select name='qtype'>" + sopt + "</select>" + 
+						"<input type='button' id=\"flexi_search\" value='" + p.search + "' />&nbsp;" +
+						"<input type='button' id=\"flexi_reset\" value='" + p.reset + "' /></div>");
+				if (p.cookies) {
+					var prefs = g.prefs.load();
+					if (typeof prefs.q != 'undefined') {
+						$('input[name=q]', g.sDiv).val(prefs.q);
+						g.doSearch();
+					}
+				}
+				$('#flexi_search', g.sDiv).click(function(e) {
+					g.doSearch();
+				});
+				$('#flexi_reset', g.sDiv).click(function() {
+					if (p.cookies) {
+						g.prefs.data = {};
+						g.prefs.save();
+					}
+					$('input[name=q]', g.sDiv).val('');
+					p.query = '';
+					g.doSearch();
+				});
 				//Split into separate selectors because of bug in jQuery 1.3.2
 				$('input[name=q]', g.sDiv).keydown(function (e) {
 					if (e.keyCode == 13) {
@@ -1243,11 +1386,14 @@
 			g.mDiv.innerHTML = '<div class="ftitle">' + p.title + '</div>';
 			$(g.gDiv).prepend(g.mDiv);
 			if (p.showTableToggleBtn) {
-				$(g.mDiv).append('<div class="ptogtitle" title="Minimize/Maximize Table"><span></span></div>');
+				$(g.mDiv).append('<div class="ptogtitle" title="' + p.minmax+'"><span></span></div>');
 				$('div.ptogtitle', g.mDiv).click(function () {
 					$(g.gDiv).toggleClass('hideBody');
 					$(this).toggleClass('vsble');
 				});
+				//by mjs minimize by default
+				if (p.minimize)
+					$('div.ptogtitle', g.mDiv).click();
 			}
 		}
 		//setup cdrops
@@ -1305,7 +1451,7 @@
 			$(g.gDiv).prepend(g.nDiv);
 			$(g.nBtn).addClass('nBtn')
 				.html('<div></div>')
-				.attr('title', 'Hide/Show Columns')
+				.attr('title', p.hideshow)
 				.click(function () {
 					$(g.nDiv).toggle();
 					return true;
@@ -1423,7 +1569,13 @@
 			});
 		}
 	}; //end noSelect
-  $.fn.flexSearch = function(p) { // function to search grid
-    return this.each( function() { if (this.grid&&this.p.searchitems) this.grid.doSearch(); });
-  }; //end flexSearch
+	$.fn.flexSearch = function(p) { // function to search grid
+		return this.each( function() { if (this.grid&&this.p.searchitems) this.grid.doSearch(); });
+	}; //end flexSearch
+	$.fn.recalcLayout = function() {
+		return this.each(function() {
+			if (this.grid)
+				this.grid.recalcLayout();
+		});
+	}; //end recalcLayout
 })(jQuery);
