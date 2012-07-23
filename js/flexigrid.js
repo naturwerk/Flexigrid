@@ -18,6 +18,8 @@
  * - Note: Columnsize functionality was intentionally left out as recent versions of
  *         Flexigrid support it out of the box.
  * - Add p.{search,reset,minmax,hideshow} to allow those strings to be translated
+ * 2012-07-23
+ * Future changelogs will be in git comments.
  */
 (function ($) {
 	$.addFlex = function (t, p) {
@@ -360,6 +362,8 @@
 				this.rePosDrag();
 			},
 			addData: function (data) { //parse data
+				if (g.bDiv.contains(noEDiv))
+					g.bDiv.removeChild(noEDiv);
 				if (p.dataType == 'json') {
 					data = $.extend({rows: [], page: 0, total: 0}, data);
 				}
@@ -380,10 +384,11 @@
 				if (p.total == 0) {
 					$('tr, a, td, div', t).unbind();
 					$(t).empty();
+					g.bDiv.appendChild(noEDiv);
 					p.pages = 1;
 					p.page = 1;
 					this.buildpager();
-					$('.pPageStat', this.pDiv).html(p.nomsg);
+					$('.pPageStat', this.pDiv).empty();
 					return false;
 				}
 				p.pages = Math.ceil(p.total / p.rp);
@@ -951,6 +956,11 @@
 		g.tDiv = document.createElement('div'); //create toolbar
 		g.sDiv = document.createElement('div');
 		g.pDiv = document.createElement('div'); //create pager container
+		var noEDiv = document.createElement('div');
+		noEDiv.style.textAlign = 'center';
+		noEDiv.style.marginTop = '90px';
+		noEDiv.style.fontSize = '2em';
+		noEDiv.innerHTML = p.nomsg;
 		if (!p.usepager) {
 			g.pDiv.style.display = 'none';
 		}
