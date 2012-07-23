@@ -87,7 +87,7 @@
 		//create grid class
 		var g = {
 			prefs : {
-			cookie_name : p.tableId,
+			cookie_name : p.tableId + '_' + document.location.pathname,
 			data : {},
 			load : function() {
 					var the_cookie = $.cookie(this.cookie_name);
